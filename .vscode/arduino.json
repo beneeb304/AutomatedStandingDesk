@@ -2,6 +2,5 @@
     "configuration": "PartitionScheme=default,CPUFreq=240,FlashMode=qio,FlashFreq=80,FlashSize=4M,UploadSpeed=921600,LoopCore=1,EventsCore=1,DebugLevel=none,EraseFlash=none",
     "board": "esp32:esp32:esp32da",
     "programmer": "esptool",
-    "port": "COM6",
-    "sketch": "sketch_RaiseLower.ino"
+    "sketch": "sketch_RaiseLower\\sketch_RaiseLower.ino"
 }
