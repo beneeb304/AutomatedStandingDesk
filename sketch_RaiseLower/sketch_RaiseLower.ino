@@ -2,14 +2,17 @@
 Things to still add include:
 - Calibrating time for setting raise/lower intervals
   - EEPROM or storage
-- Write calibrated distance values to EEPROM
 - Timer settings for automation
   - Could use clock or every x minutes
 - Moving desk to calibrated values
   - SetDeskHeight(blnDirection)
+- Add bluetooth serial output for troubleshooting mode
 */
 
-#include "BluetoothSerial.h"
+#include <BluetoothSerial.h>
+#include <Preferences.h>
+
+Preferences preferences;
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -22,8 +25,6 @@ const int pinRaise = 22;  // Pin value will likely change once on proto board
 const int pinLower = 23;  // Pin value will likely change once on proto board
 const int pinTrig = 13;   // Pin value will likely change once on proto board
 const int pinEcho = 12;   // Pin value will likely change once on proto board
-int intChairHeight = 0;
-int intStandHeight = 0;
 bool blnTS = false;
 
 void setup()
@@ -42,6 +43,9 @@ void setup()
   // Bluetooth initialization
   SerialBT.begin("SmartDesk_Test"); //Bluetooth device name
   Serial.println("The device started, now you can connect it with bluetooth!");
+
+  //Create storage space in read/write mode
+  preferences.begin("calibrations", false);
 }
 
 void loop()
@@ -54,11 +58,11 @@ void loop()
   switch (strSerialInput)
   {
     case 'C':
-      intChairHeight = CalibrateHeight();
+      SaveDeskHeight(false, CalibrateHeight());
       break;
     
     case 'S':
-      intStandHeight = CalibrateHeight();
+      SaveDeskHeight(true, CalibrateHeight());
       break;
 
     case 'R':
@@ -235,4 +239,47 @@ void SetDeskHeight(bool blnDirection)
   */
 
 
+}
+
+void SaveDeskHeight(bool blnStanding, int intHeight) {
+  /* 
+    Desc:     Saves the calibrated values (chair or stand) to preferences library
+    Params:   Boolean value for chair or stand, int value for the newly calibrated value
+    Returns:  None
+  */
+  
+  //Determine which value we're setting (chair or standing)
+  if(blnStanding) {
+    //Setting the standing value, get the chair value
+    int intChairHeight = preferences.getUInt("intChairHeight", 0);
+
+    //Only set the stand height if the new height is less than the chair height.
+    if(intHeight > intChairHeight) {
+      preferences.putUInt("intStandHeight", intHeight);
+      if(blnTS) {Serial.println("Stand calibration saved!" + String(intHeight));}
+    } else {
+      if(blnTS) {
+        Serial.println("Stand calibration NOT saved!");
+        Serial.println("Attempted stand value of " + String(intHeight) + " is less than chair value");
+        Serial.println("Stored chair height: " + String(intChairHeight));
+        Serial.println("Stored stand height: " + String(preferences.getUInt("intStandHeight", 500)));
+      }
+    }
+  } else {
+    //If setting the chair value, get the standing value
+    int intStandHeight = preferences.getUInt("intStandHeight", 500);
+
+    //Only set the chair height if the new height is greater than the standing height.
+    if(intHeight < intStandHeight) {
+      preferences.putUInt("intChairHeight", intHeight);
+      if(blnTS) {Serial.println("Chair calibration saved! " + String(intHeight));}
+    } else {
+      if(blnTS) {
+        Serial.println("Chair calibration NOT saved!");
+        Serial.println("Attempted chair value of " + String(intHeight) + " is greater than stand value");
+        Serial.println("Stored chair height: " + String(preferences.getUInt("intChairHeight", 0)));
+        Serial.println("Stored stand height: " + String(intStandHeight));
+      }
+    }
+  }
 }
