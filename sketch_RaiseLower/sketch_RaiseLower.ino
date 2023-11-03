@@ -4,9 +4,9 @@ Things to still add include:
   - EEPROM or storage
 - Timer settings for automation
   - Could use clock or every x minutes
-- Moving desk to calibrated values
-  - SetDeskHeight(blnDirection)
 - Add bluetooth serial output for troubleshooting mode
+- Add bluetooth commands
+  - Experiment with adding serial (usb or bt) and only have one switch-case
 */
 
 #include <BluetoothSerial.h>
@@ -41,10 +41,10 @@ void setup()
   pinMode(pinEcho, INPUT);
 
   // Bluetooth initialization
-  SerialBT.begin("SmartDesk_Test"); //Bluetooth device name
+  SerialBT.begin("SmartDesk_Test"); // Bluetooth device name
   Serial.println("The device started, now you can connect it with bluetooth!");
 
-  //Create storage space in read/write mode
+  // Create storage space in read/write mode
   preferences.begin("calibrations", false);
 }
 
@@ -58,29 +58,23 @@ void loop()
   switch (strSerialInput)
   {
     case 'C':
+      // Calibrate the chair height
       SaveDeskHeight(false, CalibrateHeight());
       break;
     
     case 'S':
+      // Calibrate the standing height
       SaveDeskHeight(true, CalibrateHeight());
       break;
 
     case 'R':
-      if(blnTS) {Serial.println("Raise for 2 seconds...");}
-      digitalWrite(pinRaise, LOW);
-      delay(2000);
-      digitalWrite(pinRaise, HIGH);
-
-      // SetDeskHeight(true);
+      // Move the desk to the standing height
+      SetDeskHeight(true);
       break;
     
     case 'L':
-      if(blnTS) {Serial.println("Lower for 2 seconds...");}
-      digitalWrite(pinLower, LOW);
-      delay(2000);
-      digitalWrite(pinLower, HIGH);
-
-      // SetDeskHeight(false);
+      // Move the desk to the chair height
+      SetDeskHeight(false);
       break;
     
     case 'T':
@@ -93,28 +87,28 @@ void loop()
       break;
   }
 
-  // Check for bluetooth serial triggers
-  switch (strBTSerialInput)
-  {
-  case 'R':
-      SerialBT.println("Raise for 2 seconds...");
-      digitalWrite(pinRaise, LOW);
-      delay(2000);
-      digitalWrite(pinRaise, HIGH);
-      break;
-    break;
+  // // Check for bluetooth serial triggers
+  // switch (strBTSerialInput)
+  // {
+  // case 'R':
+  //     SerialBT.println("Raise for 2 seconds...");
+  //     digitalWrite(pinRaise, LOW);
+  //     delay(2000);
+  //     digitalWrite(pinRaise, HIGH);
+  //     break;
+  //   break;
   
-  case 'L':
-      Serial.println("Lower for 2 seconds...");
-      digitalWrite(pinLower, LOW);
-      delay(2000);
-      digitalWrite(pinLower, HIGH);
-      break;
-    break;
+  // case 'L':
+  //     Serial.println("Lower for 2 seconds...");
+  //     digitalWrite(pinLower, LOW);
+  //     delay(2000);
+  //     digitalWrite(pinLower, HIGH);
+  //     break;
+  //   break;
   
-  default:    
-    break;
-  }
+  // default:    
+  //   break;
+  // }
   
   // Minor delay to avoid hiccups
   delay(20);
@@ -128,7 +122,7 @@ int GetUltrasonicReading()
     Returns:  Current distance as integer (in cm)
   */
 
-  float duration, distance;
+  float fltDuration, fltDistance;
 
   // Get readings from HC-SR04 ultrasonic sensor
   digitalWrite(pinTrig, LOW);
@@ -138,9 +132,9 @@ int GetUltrasonicReading()
   digitalWrite(pinTrig, LOW);
 
   // Translate readings to cm
-  duration = pulseIn(pinEcho, HIGH);
-  distance = (duration*.0343)/2;
-  return (int) distance;
+  fltDuration = pulseIn(pinEcho, HIGH);
+  fltDistance = (fltDuration*.0343)/2;
+  return (int) fltDistance;
 }
 
 int CalibrateHeight()
@@ -238,7 +232,67 @@ void SetDeskHeight(bool blnDirection)
     Returns:  None
   */
 
+  // Set a failsafe maximum of 10 seconds for the desk to be in motion
+  unsigned long maxSeconds = 10000;
+  unsigned long previousMillis = millis();
+  unsigned long currentMillis = previousMillis;
+  int intRequestedHeight;
 
+  if(blnDirection) {
+    // Get the height we need to raise to
+    intRequestedHeight = preferences.getUInt("intStandHeight", 1);
+
+    if(blnTS) {
+      Serial.println("Starting to raise desk...");
+      Serial.println("Requested stand height: " + String(intRequestedHeight));
+      Serial.println("Current height: " + String(GetUltrasonicReading()));
+    }
+
+    // Only continue if 10 seconds have NOT passed AND the current height is < the standing height
+    while((currentMillis - previousMillis < maxSeconds) && (GetUltrasonicReading() < intRequestedHeight)) {
+      // Update current time
+      currentMillis = millis();
+
+      // Raise the desk
+      digitalWrite(pinRaise, LOW);
+    }
+
+    // Once loop conditions are not true, stop raising the desk
+    digitalWrite(pinRaise, HIGH);
+
+    if(blnTS) {
+      Serial.println("Finished raising desk...");
+      Serial.println("Current height: " + String(GetUltrasonicReading()));
+      Serial.println("Elapsed time to raise: " + String(currentMillis - previousMillis));
+    }
+  } else {
+    // Get the height we need to lower to
+    intRequestedHeight = preferences.getUInt("intChairHeight", 150);
+
+    if(blnTS) {
+      Serial.println("Starting to lower desk...");
+      Serial.println("Requested chair height: " + String(intRequestedHeight));
+      Serial.println("Current height: " + String(GetUltrasonicReading()));
+    }
+
+    // Only continue if 10 seconds have NOT passed AND the current height is > the chair height
+    while((currentMillis - previousMillis < maxSeconds) && (GetUltrasonicReading() > intRequestedHeight)) {
+      // Update current time
+      currentMillis = millis();
+
+      // Lower the desk
+      digitalWrite(pinLower, LOW);
+    }
+
+    // Once loop conditions are not true, stop lowering the desk
+    digitalWrite(pinLower, HIGH);
+
+    if(blnTS) {
+      Serial.println("Finished lowering desk...");
+      Serial.println("Current height: " + String(GetUltrasonicReading()));
+      Serial.println("Elapsed time to lower: " + String(currentMillis - previousMillis));
+    }
+  }
 }
 
 void SaveDeskHeight(bool blnStanding, int intHeight) {
@@ -248,12 +302,12 @@ void SaveDeskHeight(bool blnStanding, int intHeight) {
     Returns:  None
   */
   
-  //Determine which value we're setting (chair or standing)
+  // Determine which value we're setting (chair or standing)
   if(blnStanding) {
-    //Setting the standing value, get the chair value
-    int intChairHeight = preferences.getUInt("intChairHeight", 0);
+    // Setting the standing value, get the chair value
+    int intChairHeight = preferences.getUInt("intChairHeight", 1);
 
-    //Only set the stand height if the new height is less than the chair height.
+    // Only set the stand height if the new height is less than the chair height.
     if(intHeight > intChairHeight) {
       preferences.putUInt("intStandHeight", intHeight);
       if(blnTS) {Serial.println("Stand calibration saved!" + String(intHeight));}
@@ -262,14 +316,14 @@ void SaveDeskHeight(bool blnStanding, int intHeight) {
         Serial.println("Stand calibration NOT saved!");
         Serial.println("Attempted stand value of " + String(intHeight) + " is less than chair value");
         Serial.println("Stored chair height: " + String(intChairHeight));
-        Serial.println("Stored stand height: " + String(preferences.getUInt("intStandHeight", 500)));
+        Serial.println("Stored stand height: " + String(preferences.getUInt("intStandHeight", 150)));
       }
     }
   } else {
-    //If setting the chair value, get the standing value
-    int intStandHeight = preferences.getUInt("intStandHeight", 500);
+    // If setting the chair value, get the standing value
+    int intStandHeight = preferences.getUInt("intStandHeight", 150);
 
-    //Only set the chair height if the new height is greater than the standing height.
+    // Only set the chair height if the new height is greater than the standing height.
     if(intHeight < intStandHeight) {
       preferences.putUInt("intChairHeight", intHeight);
       if(blnTS) {Serial.println("Chair calibration saved! " + String(intHeight));}
@@ -277,7 +331,7 @@ void SaveDeskHeight(bool blnStanding, int intHeight) {
       if(blnTS) {
         Serial.println("Chair calibration NOT saved!");
         Serial.println("Attempted chair value of " + String(intHeight) + " is greater than stand value");
-        Serial.println("Stored chair height: " + String(preferences.getUInt("intChairHeight", 0)));
+        Serial.println("Stored chair height: " + String(preferences.getUInt("intChairHeight", 1)));
         Serial.println("Stored stand height: " + String(intStandHeight));
       }
     }
