@@ -9,6 +9,9 @@ Things to still add include:
   - Experiment with adding serial (usb or bt) and only have one switch-case
 */
 
+
+// Board: ESP32-WROOM-DA Module
+
 #include <BluetoothSerial.h>
 #include <Preferences.h>
 
@@ -19,13 +22,16 @@ Preferences preferences;
 #endif
 
 BluetoothSerial SerialBT;
-int strSerialInput;
-int strBTSerialInput;
+char chrSerialInput;
+char chrBTSerialInput;
 const int pinRaise = 22;  // Pin value will likely change once on proto board
 const int pinLower = 23;  // Pin value will likely change once on proto board
 const int pinTrig = 13;   // Pin value will likely change once on proto board
 const int pinEcho = 12;   // Pin value will likely change once on proto board
 bool blnTS = false;
+bool blnAutoChange = true;
+unsigned long lngLastChange = 0;
+String strMinutes = "";
 
 void setup()
 {
@@ -51,11 +57,50 @@ void setup()
 void loop()
 {
   // Read any serial inputs
-  strSerialInput = Serial.read();
-  strBTSerialInput = SerialBT.read();
+  chrSerialInput = Serial.read();
   
-  // Check for serial triggers
-  switch (strSerialInput)
+  while (SerialBT.available()) {
+    chrBTSerialInput = SerialBT.read();
+
+    // Check for bluetooth serial triggers
+    switch (chrBTSerialInput)
+    {
+    case 'A':
+      // Toggle desk auto height change
+      blnAutoChange = !blnAutoChange;
+      SerialBT.println("Auto change: " + String(blnAutoChange));
+    case 'M':
+      SaveTimeInterval(strMinutes.toInt());
+      break;
+    // case 'S':
+    //   Serial.println("HIT ME S");
+    //   break;
+    // case 'R':
+    //     SerialBT.println("Raise for 2 seconds...");
+    //     digitalWrite(pinRaise, LOW);
+    //     delay(2000);
+    //     digitalWrite(pinRaise, HIGH);
+    //     break;
+    //   break;    
+    // case 'L':
+    //     Serial.println("Lower for 2 seconds...");
+    //     digitalWrite(pinLower, LOW);
+    //     delay(2000);
+    //     digitalWrite(pinLower, HIGH);
+    //     break;
+    //   break;    
+    default:
+      // Assume we are recieving a numeric value in char form and append to string
+      strMinutes += chrBTSerialInput;
+      break;
+    }
+  }
+
+  // Clear minutes variable when not recieving serial data
+  strMinutes = "";
+
+  // Check for USB serial triggers
+  switch (chrSerialInput)
   {
     case 'C':
       // Calibrate the chair height
@@ -87,28 +132,9 @@ void loop()
       break;
   }
 
-  // // Check for bluetooth serial triggers
-  // switch (strBTSerialInput)
-  // {
-  // case 'R':
-  //     SerialBT.println("Raise for 2 seconds...");
-  //     digitalWrite(pinRaise, LOW);
-  //     delay(2000);
-  //     digitalWrite(pinRaise, HIGH);
-  //     break;
-  //   break;
+
+
   
-  // case 'L':
-  //     Serial.println("Lower for 2 seconds...");
-  //     digitalWrite(pinLower, LOW);
-  //     delay(2000);
-  //     digitalWrite(pinLower, HIGH);
-  //     break;
-  //   break;
-  
-  // default:    
-  //   break;
-  // }
   
   // Minor delay to avoid hiccups
   delay(20);
@@ -337,3 +363,45 @@ void SaveDeskHeight(bool blnStanding, int intHeight) {
     }
   }
 }
+
+void SaveTimeInterval(int intMinutes) {
+  preferences.putUInt("intTimeInterval", intMinutes);
+  if(blnTS) {Serial.println("Time interval in minutes saved!" + String(intMinutes));}
+}
+
+void CompareTime() {
+  /* 
+    Desc:     Compare current time with last moved time. If the interval is >= the set interval time, then trigger a state change
+    Params:   None
+    Returns:  None
+  */
+
+  // Only continue if auto change is enabled
+  if(blnAutoChange) {
+    // Get current time
+    unsigned long lngCurrentTime = millis();
+
+    //Get saved interval time and convert to milliseconds
+    unsigned long lngInterval = preferences.getUInt("intTimeInterval", 30) * 60000;
+
+    if((lngCurrentTime - lngLastChange) >= lngInterval) {
+      //MOVE THE DESK
+
+      // Get current US reading
+      // Determine if we're currently standing or sitting
+      // Change to the opposite
+
+    } else {
+      //Account for 50 day reset here
+      //NEEDS WORK...
+    }
+  }
+}
+
+// void TroubleshootingOutput(string strMessage) {
+//   // Check if we're troubleshooting to USB and/or BT serial
+
+
+
+
+// }
