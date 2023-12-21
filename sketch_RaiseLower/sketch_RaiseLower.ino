@@ -428,7 +428,7 @@ void CompareTime()
       int intABSstand = intCurrentHeight - intStandHeight;
       int intABSchair = intCurrentHeight - intChairHeight;
       // Determine if we're currently standing or sitting
-      If(abs(intABSstand) > abs(intABSchair))
+      if(abs(intABSstand) > abs(intABSchair))
       {
         // Move the desk to the standing height
         SetDeskHeight(true);
