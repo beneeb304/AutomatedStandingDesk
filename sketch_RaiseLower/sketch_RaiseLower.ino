@@ -1,11 +1,15 @@
-/*
-Things to still add include:
-- Add bluetooth commands
-  - Experiment with adding serial (usb or bt) and only have one switch-case
-*/
-
-
-// Board: ESP32-WROOM-DA Module
+// ****************************************************************************************************
+// File:          sketch_RaiseLower.ino
+// Project:       Automated Standing Desk
+// Created:       8/3/2023
+// Author:        Ben Neeb
+// Purpose:       Automatically raise and lower SteelCase standing desks
+// Input:         NA, IoT project
+// Output:        NA, IoT project
+// Requirements:  ESP32-WROOM-DA board and an ultrasonic module HC-SR04
+// Revised:       
+// Change Notes:  
+// ****************************************************************************************************
 
 #include <BluetoothSerial.h>
 #include <Preferences.h>
@@ -18,14 +22,11 @@ Preferences preferences;
 
 BluetoothSerial SerialBT;
 char chrSerialInput;
-char chrBTSerialInput;
 const int pinRaise = 22;  // Pin value will likely change once on proto board
 const int pinLower = 23;  // Pin value will likely change once on proto board
 const int pinTrig = 13;   // Pin value will likely change once on proto board
 const int pinEcho = 12;   // Pin value will likely change once on proto board
 bool blnVerbose = false;
-bool blnVerboseUSB = false;
-bool blnVerboseBT = false;
 bool blnAutoChange = true;
 unsigned long lngLastChange = 0;
 String strMinutes = "";
@@ -53,95 +54,76 @@ void setup()
 
 void loop()
 {
-  // Read any serial inputs
-  chrSerialInput = Serial.read();
-  
-  while (SerialBT.available())
+  // Loop while either bluetooth or USB serial is available
+  while (SerialBT.available() || Serial.available())
   {
-    chrBTSerialInput = SerialBT.read();
-
-    // Check for bluetooth serial triggers
-    switch (chrBTSerialInput)
+    // Read bt serial, if not available read usb serial
+    if(SerialBT.available()) 
     {
-    case 'A':
-      // Toggle desk auto height change
-      blnAutoChange = !blnAutoChange;
-      SerialBT.println("Auto change: " + String(blnAutoChange));
-    case 'M':
-      SaveTimeInterval(strMinutes.toInt());
-      break;
-    // case 'S':
-    //   Serial.println("HIT ME S");
-    //   break;
-    // case 'R':
-    //     SerialBT.println("Raise for 2 seconds...");
-    //     digitalWrite(pinRaise, LOW);
-    //     delay(2000);
-    //     digitalWrite(pinRaise, HIGH);
-    //     break;
-    //   break;    
-    // case 'L':
-    //     Serial.println("Lower for 2 seconds...");
-    //     digitalWrite(pinLower, LOW);
-    //     delay(2000);
-    //     digitalWrite(pinLower, HIGH);
-    //     break;
-    //   break;    
-    default:
-      // Assume we are recieving a numeric value in char form and append to string
-      strMinutes += chrBTSerialInput;
-      break;
+      chrSerialInput = SerialBT.read(); 
+      if(blnVerbose && isalnum(chrSerialInput)) { VerboseOutput("Recieved BT serial: " + String(chrSerialInput)); }
+    }
+    else if(Serial.available())
+    {
+      chrSerialInput = Serial.read();
+      if(blnVerbose && isalnum(chrSerialInput)) { VerboseOutput("Recieved USB serial: " + String(chrSerialInput)); }
+    }
+
+    // Check for serial triggers
+    switch (chrSerialInput)
+    {
+      case 'A':
+        // Toggle desk auto height change
+        blnAutoChange = !blnAutoChange;
+        if(blnVerbose) { VerboseOutput("Auto change: " + String(blnAutoChange)); }
+        break;
+        
+      case 'M':
+        SaveTimeInterval(strMinutes.toInt());
+        break;
+
+      case 'C':
+        // Calibrate the chair height
+        SaveDeskHeight(false, CalibrateHeight());
+        break;
+      
+      case 'S':
+        // Calibrate the standing height
+        SaveDeskHeight(true, CalibrateHeight());
+        break;
+
+      case 'R':
+        // Move the desk to the standing height
+        SetDeskHeight(true);
+        break;
+      
+      case 'L':
+        // Move the desk to the chair height
+        SetDeskHeight(false);
+        break;
+      
+      case 'V':
+        // Toggle verbose mode for Bluetooth
+        blnVerbose = !blnVerbose;
+        VerboseOutput("Verbose mode for Bluetooth: " + String(blnVerbose));
+        break;
+
+      case 'v':
+        // Toggle verbose mode for USB
+        blnVerbose = !blnVerbose;
+        VerboseOutput("Verbose mode for USB: " + String(blnVerbose));
+        break;
+
+      default:
+        // Assume we are recieving a numeric value in char form and append to string
+        strMinutes += chrSerialInput;
+        break;
     }
   }
 
   // Clear minutes variable when not recieving serial data
   strMinutes = "";
 
-  // Check for USB serial triggers
-  switch (chrSerialInput)
-  {
-    case 'C':
-      // Calibrate the chair height
-      SaveDeskHeight(false, CalibrateHeight());
-      break;
-    
-    case 'S':
-      // Calibrate the standing height
-      SaveDeskHeight(true, CalibrateHeight());
-      break;
-
-    case 'R':
-      // Move the desk to the standing height
-      SetDeskHeight(true);
-      break;
-    
-    case 'L':
-      // Move the desk to the chair height
-      SetDeskHeight(false);
-      break;
-    
-    case 'V':
-      // Toggle verbose mode for Bluetooth
-      blnVerbose = !blnVerbose;
-      blnVerboseBT = !blnVerboseBT;
-      VerboseOutput("Verbose mode for Bluetooth: " + String(blnVerbose));
-      break;
-
-    case 'v':
-      // Toggle verbose mode for USB
-      blnVerbose = !blnVerbose;
-      blnVerboseUSB = !blnVerboseUSB;
-      VerboseOutput("Verbose mode for USB: " + String(blnVerbose));
-      break;
-
-    default:
-      break;
-  }
-
-
-
-  
-  
   // Minor delay to avoid hiccups
   delay(20);
 }
@@ -265,7 +247,7 @@ void SetDeskHeight(bool blnDirection)
   if(blnDirection)
   {
     // Get the height we need to raise to
-    intRequestedHeight = preferences.getUInt("intStandHeight", 1);      //FIND ME - NEED TO CHANGE TO 150?
+    intRequestedHeight = preferences.getUInt("intStandHeight", 150);
 
     if(blnVerbose)
     {
@@ -293,9 +275,11 @@ void SetDeskHeight(bool blnDirection)
       VerboseOutput("Current height: " + String(GetUltrasonicReading()));
       VerboseOutput("Elapsed time to raise: " + String(currentMillis - previousMillis));
     }
-  } else {
+  }
+  else
+  {
     // Get the height we need to lower to
-    intRequestedHeight = preferences.getUInt("intChairHeight", 150);    //FIND ME - NEED TO CHANGE TO 1???
+    intRequestedHeight = preferences.getUInt("intChairHeight", 1);
 
     if(blnVerbose)
     {
@@ -344,7 +328,7 @@ void SaveDeskHeight(bool blnStanding, int intHeight)
     if(intHeight > intChairHeight)
     {
       preferences.putUInt("intStandHeight", intHeight);
-      if(blnVerbose) { VerboseOutput("Stand calibration saved!" + String(intHeight)); }
+      if(blnVerbose) { VerboseOutput("Stand calibration saved! " + String(intHeight)); }
     }
     else
     {
@@ -390,7 +374,7 @@ void SaveTimeInterval(int intMinutes)
   */
   
   preferences.putUInt("intTimeInterval", intMinutes);
-  if(blnVerbose) { VerboseOutput("Time interval in minutes saved!" + String(intMinutes)); }
+  if(blnVerbose) { VerboseOutput("Time interval in minutes saved! " + String(intMinutes)); }
 }
 
 void CompareTime()
@@ -432,7 +416,9 @@ void CompareTime()
       {
         // Move the desk to the standing height
         SetDeskHeight(true);
-      } else {
+      }
+      else
+      {
         // Move the desk to the chair height
         SetDeskHeight(false);
       }
@@ -451,6 +437,6 @@ void VerboseOutput(String strMessage)
     Returns:  None
   */
   
-  if(blnVerboseBT) { SerialBT.println(strMessage); }
-  if(blnVerboseUSB) { Serial.println(strMessage); }
+  SerialBT.println(strMessage);
+  Serial.println(strMessage);
 }
