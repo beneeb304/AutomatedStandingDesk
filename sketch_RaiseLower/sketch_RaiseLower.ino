@@ -1,7 +1,5 @@
 /*
 Things to still add include:
-- Add bluetooth serial output for troubleshooting mode
-  - Condense every troubleshooting section to use TS method
 - Add bluetooth commands
   - Experiment with adding serial (usb or bt) and only have one switch-case
 */
@@ -25,7 +23,9 @@ const int pinRaise = 22;  // Pin value will likely change once on proto board
 const int pinLower = 23;  // Pin value will likely change once on proto board
 const int pinTrig = 13;   // Pin value will likely change once on proto board
 const int pinEcho = 12;   // Pin value will likely change once on proto board
-bool blnTS = false;
+bool blnVerbose = false;
+bool blnVerboseUSB = false;
+bool blnVerboseBT = false;
 bool blnAutoChange = true;
 unsigned long lngLastChange = 0;
 String strMinutes = "";
@@ -120,10 +120,18 @@ void loop()
       SetDeskHeight(false);
       break;
     
-    case 'T':
-      // Toggle troubleshooting mode
-      blnTS = !blnTS;
-      Serial.println("Troubleshooting mode: " + String(blnTS));
+    case 'V':
+      // Toggle verbose mode for Bluetooth
+      blnVerbose = !blnVerbose;
+      blnVerboseBT = !blnVerboseBT;
+      VerboseOutput("Verbose mode for Bluetooth: " + String(blnVerbose));
+      break;
+
+    case 'v':
+      // Toggle verbose mode for USB
+      blnVerbose = !blnVerbose;
+      blnVerboseUSB = !blnVerboseUSB;
+      VerboseOutput("Verbose mode for USB: " + String(blnVerbose));
       break;
 
     default:
@@ -193,11 +201,7 @@ int CalibrateHeight()
       intHighBoundry = (intCummulative/i) + 2;
       intLowBoundry = (intCummulative/i) - 2;
 
-      if(blnTS)
-      {
-        Serial.println("High boundry: " + String(intHighBoundry));
-        Serial.println("Low boundry: " + String(intLowBoundry));
-      }
+      if(blnVerbose) { VerboseOutput("High boundry: " + String(intHighBoundry) + ", Low boundry: " + String(intLowBoundry)); }
 
       // Check current reading against boundries - it needs to be between them
       if(intDistance > intLowBoundry && intDistance < intHighBoundry)
@@ -207,8 +211,8 @@ int CalibrateHeight()
       }
       else
       {
-        if(blnTS) {Serial.println("Iteration " + String(i) + " failed with distance " + String(intDistance));}
-        
+        if(blnVerbose) { VerboseOutput("Iteration " + String(i) + " failed with distance " + String(intDistance)); }
+
         // If the reading is not within boundries, repeat loop and increment error check
         i--;
         intErrorCheck++;
@@ -216,7 +220,7 @@ int CalibrateHeight()
         // If error check fails more than three times, restart calibration
         if(intErrorCheck > 3)
         {
-          if(blnTS) {Serial.println("Calibration error triggered");}
+          if(blnVerbose) { VerboseOutput("Calibration error triggered"); }
           
           // Reset variables
           i = -1;
@@ -226,23 +230,19 @@ int CalibrateHeight()
       }
     }
 
-    if(blnTS)
-    {
-      Serial.println("Iteration: " + String(i));
-      Serial.println("Distance: " + String(intDistance));
-    }
-    
+    if(blnVerbose) { VerboseOutput("Iteration: " + String(i) + ", Distance: " + String(intDistance)); }
+
     delay(100);
   }
 
   // Get average value for calibration setting
   intAvg = intCummulative / 5;
 
-  if(blnTS)
+  if(blnVerbose)
   {
-    Serial.println("Cummulative: " + String(intCummulative));
-    Serial.println("Average: " + String(intAvg));
-    Serial.println("*** Calibration Completed ***");
+    VerboseOutput("Cummulative: " + String(intCummulative));
+    VerboseOutput("Average: " + String(intAvg));
+    VerboseOutput("*** Calibration Completed ***");
   }
 
   return intAvg;
@@ -267,11 +267,11 @@ void SetDeskHeight(bool blnDirection)
     // Get the height we need to raise to
     intRequestedHeight = preferences.getUInt("intStandHeight", 1);      //FIND ME - NEED TO CHANGE TO 150?
 
-    if(blnTS)
+    if(blnVerbose)
     {
-      Serial.println("Starting to raise desk...");
-      Serial.println("Requested stand height: " + String(intRequestedHeight));
-      Serial.println("Current height: " + String(GetUltrasonicReading()));
+      VerboseOutput("Starting to raise desk...");
+      VerboseOutput("Requested stand height: " + String(intRequestedHeight));
+      VerboseOutput("Current height: " + String(GetUltrasonicReading()));
     }
 
     // Only continue if 10 seconds have NOT passed AND the current height is < the standing height
@@ -287,21 +287,21 @@ void SetDeskHeight(bool blnDirection)
     // Once loop conditions are not true, stop raising the desk
     digitalWrite(pinRaise, HIGH);
 
-    if(blnTS)
+    if(blnVerbose)
     {
-      Serial.println("Finished raising desk...");
-      Serial.println("Current height: " + String(GetUltrasonicReading()));
-      Serial.println("Elapsed time to raise: " + String(currentMillis - previousMillis));
+      VerboseOutput("Finished raising desk...");
+      VerboseOutput("Current height: " + String(GetUltrasonicReading()));
+      VerboseOutput("Elapsed time to raise: " + String(currentMillis - previousMillis));
     }
   } else {
     // Get the height we need to lower to
     intRequestedHeight = preferences.getUInt("intChairHeight", 150);    //FIND ME - NEED TO CHANGE TO 1???
 
-    if(blnTS)
+    if(blnVerbose)
     {
-      Serial.println("Starting to lower desk...");
-      Serial.println("Requested chair height: " + String(intRequestedHeight));
-      Serial.println("Current height: " + String(GetUltrasonicReading()));
+      VerboseOutput("Starting to lower desk...");
+      VerboseOutput("Requested chair height: " + String(intRequestedHeight));
+      VerboseOutput("Current height: " + String(GetUltrasonicReading()));
     }
 
     // Only continue if 10 seconds have NOT passed AND the current height is > the chair height
@@ -317,11 +317,11 @@ void SetDeskHeight(bool blnDirection)
     // Once loop conditions are not true, stop lowering the desk
     digitalWrite(pinLower, HIGH);
 
-    if(blnTS)
+    if(blnVerbose)
     {
-      Serial.println("Finished lowering desk...");
-      Serial.println("Current height: " + String(GetUltrasonicReading()));
-      Serial.println("Elapsed time to lower: " + String(currentMillis - previousMillis));
+      VerboseOutput("Finished lowering desk...");
+      VerboseOutput("Current height: " + String(GetUltrasonicReading()));
+      VerboseOutput("Elapsed time to lower: " + String(currentMillis - previousMillis));
     }
   }
 }
@@ -344,16 +344,16 @@ void SaveDeskHeight(bool blnStanding, int intHeight)
     if(intHeight > intChairHeight)
     {
       preferences.putUInt("intStandHeight", intHeight);
-      if(blnTS) {Serial.println("Stand calibration saved!" + String(intHeight));}
+      if(blnVerbose) { VerboseOutput("Stand calibration saved!" + String(intHeight)); }
     }
     else
     {
-      if(blnTS)
+      if(blnVerbose)
       {
-        Serial.println("Stand calibration NOT saved!");
-        Serial.println("Attempted stand value of " + String(intHeight) + " is less than chair value");
-        Serial.println("Stored chair height: " + String(intChairHeight));
-        Serial.println("Stored stand height: " + String(preferences.getUInt("intStandHeight", 150)));
+        VerboseOutput("Stand calibration NOT saved!");
+        VerboseOutput("Attempted stand value of " + String(intHeight) + " is less than chair value");
+        VerboseOutput("Stored chair height: " + String(intChairHeight));
+        VerboseOutput("Stored stand height: " + String(preferences.getUInt("intStandHeight", 150)));
       }
     }
   }
@@ -366,16 +366,16 @@ void SaveDeskHeight(bool blnStanding, int intHeight)
     if(intHeight < intStandHeight)
     {
       preferences.putUInt("intChairHeight", intHeight);
-      if(blnTS) {Serial.println("Chair calibration saved! " + String(intHeight));}
+      if(blnVerbose) { VerboseOutput("Chair calibration saved! " + String(intHeight)); }
     }
     else
     {
-      if(blnTS)
+      if(blnVerbose)
       {
-        Serial.println("Chair calibration NOT saved!");
-        Serial.println("Attempted chair value of " + String(intHeight) + " is greater than stand value");
-        Serial.println("Stored chair height: " + String(preferences.getUInt("intChairHeight", 1)));
-        Serial.println("Stored stand height: " + String(intStandHeight));
+        VerboseOutput("Chair calibration NOT saved!");
+        VerboseOutput("Attempted chair value of " + String(intHeight) + " is greater than stand value");
+        VerboseOutput("Stored chair height: " + String(preferences.getUInt("intChairHeight", 1)));
+        VerboseOutput("Stored stand height: " + String(intStandHeight));
       }
     }
   }
@@ -390,7 +390,7 @@ void SaveTimeInterval(int intMinutes)
   */
   
   preferences.putUInt("intTimeInterval", intMinutes);
-  if(blnTS) {Serial.println("Time interval in minutes saved!" + String(intMinutes));}
+  if(blnVerbose) { VerboseOutput("Time interval in minutes saved!" + String(intMinutes)); }
 }
 
 void CompareTime()
@@ -418,9 +418,9 @@ void CompareTime()
       int intStandHeight = preferences.getUInt("intStandHeight", 150);
       int intChairHeight = preferences.getUInt("intChairHeight", 1);
 
-      if(blnTS)
+      if(blnVerbose)
       {
-        TroubleshootingOutput("Current US: " + String(intCurrentHeight) + 
+        VerboseOutput("Current US: " + String(intCurrentHeight) + 
         ", Saved stand: " + String(intStandHeight) + 
         ", Saved chair: " + String(intChairHeight));
       }
@@ -443,14 +443,14 @@ void CompareTime()
   }
 }
 
-void TroubleshootingOutput(String strMessage)
+void VerboseOutput(String strMessage)
 {
   /* 
-    Desc:     Outputs troubleshooting message to usb serial and bluetooth serial
+    Desc:     Outputs verbose message to usb serial and/or bluetooth serial
     Params:   String of ts message to send
     Returns:  None
   */
   
-  Serial.println(strMessage);
-  SerialBT.println(strMessage);
+  if(blnVerboseBT) { SerialBT.println(strMessage); }
+  if(blnVerboseUSB) { Serial.println(strMessage); }
 }
