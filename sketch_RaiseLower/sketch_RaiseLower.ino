@@ -22,10 +22,10 @@ Preferences preferences;
 
 BluetoothSerial SerialBT;
 char chrSerialInput;
-const int pinRaise = 22;  // Pin value will likely change once on proto board
-const int pinLower = 23;  // Pin value will likely change once on proto board
-const int pinTrig = 13;   // Pin value will likely change once on proto board
-const int pinEcho = 12;   // Pin value will likely change once on proto board
+const int pinRaise = 32;
+const int pinLower = 35;
+const int pinTrig = 25;
+const int pinEcho = 33;
 bool blnVerbose = false;
 bool blnAutoChange = true;
 unsigned long lngLastChange = 0;
